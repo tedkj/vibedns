@@ -1,0 +1,280 @@
+// The resolver columns: one cut card per resolver, side by side, scrolling sideways past the
+// window's width. A card is one accessibility node (its texts are not nodes).
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Type, Chamfer, TipArea, Kbd } from "@vibeware";
+import { Card, Chip, RecordRow } from "types.slint";
+
+export global CardSize {
+    out property <length> width: 272px;
+    out property <length> gap: 10px;
+    out property <length> record-h: 20px;
+}
+
+component ChipView inherits Rectangle {
+    in property <Chip> c;
+    property <color> ink: !root.c.on ? Theme.line-strong : root.c.kind == 1 ? Theme.accent : root.c.kind == 2 ? Theme.warn : root.c.kind == 3 ? Theme.danger : Theme.ink-2;
+    width: t.preferred-width + 10px;
+    height: 18px;
+    Chamfer {
+        width: 100%;
+        height: 100%;
+        cut: 3px;
+        stroke: root.c.on ? root.ink.with-alpha(0.7) : transparent;
+    }
+    t := Text {
+        text: root.c.text;
+        font-family: Type.mono;
+        font-size: Type.small;
+        color: Theme.as-text(root.ink);
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    if root.c.tip != "": TipArea {
+        tooltip: root.c.tip;
+    }
+}
+
+component CardView inherits Rectangle {
+    in property <Card> c;
+    callback clicked();
+    width: CardSize.width;
+    accessible-role: list-item;
+    accessible-label: root.c.title;
+    accessible-description: root.c.a11y;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.c.selected;
+    accessible-action-default => { root.clicked(); }
+
+    property <color> verdict-ink: root.c.verdict-kind == 2 ? Theme.warn : Theme.ok;
+
+    // The window's own surface shows through: one fill per region (VIBEWARE.md).
+    Chamfer {
+        width: 100%;
+        height: 100%;
+        cut: Theme.cut;
+        stroke: root.c.selected ? Theme.accent : ta.has-hover ? Theme.line-strong : Theme.line;
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    VerticalLayout {
+        padding: 12px;
+        padding-top: 10px;
+        spacing: 5px;
+        alignment: start;
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.c.title;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                overflow: elide;
+                font-size: Type.body;
+                font-weight: Type.strong;
+                color: Theme.ink;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            if root.c.verdict != "": Rectangle {
+                width: vt.preferred-width + 12px;
+                height: 18px;
+                Chamfer {
+                    width: 100%;
+                    height: 100%;
+                    cut: 3px;
+                    fill: root.c.verdict-kind == 2 ? Theme.warn.with-alpha(0.14) : transparent;
+                    // "agrees" is quiet; "differs" carries the warning.
+                    stroke: root.c.verdict-kind == 2 ? root.verdict-ink.with-alpha(0.7) : transparent;
+                }
+                vt := Text {
+                    text: root.c.verdict;
+                    font-family: Type.mono;
+                    font-size: Type.small;
+                    color: Theme.as-text(root.verdict-ink);
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+                if root.c.verdict-tip != "": TipArea {
+                    tooltip: root.c.verdict-tip;
+                    clicked => { root.clicked(); }
+                }
+            }
+        }
+        Text {
+            text: root.c.sub;
+            overflow: elide;
+            font-family: Type.mono;
+            font-size: Type.small;
+            color: Theme.ink-3;
+            accessible-role: none;
+        }
+        Rectangle { height: 2px; }
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.c.state == 0 ? "Asking…" : root.c.rcode;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                overflow: elide;
+                font-family: Type.mono;
+                font-size: Type.body;
+                font-weight: Type.strong;
+                color: root.c.state == 0 ? Theme.ink-3 : root.c.rcode-kind == 2 ? Theme.danger-text : root.c.rcode-kind == 1 ? Theme.warn-text : Theme.ink;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            if root.c.setup != "": Text {
+                text: root.c.setup;
+                font-family: Type.mono;
+                font-size: Type.small;
+                color: Theme.ink-3;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            Rectangle {
+                width: tm.preferred-width;
+                tm := Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.c.time;
+                    font-family: Type.mono;
+                    font-size: Type.small;
+                    color: Theme.ink-2;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+                if root.c.time-tip != "": TipArea {
+                    tooltip: root.c.time-tip;
+                    clicked => { root.clicked(); }
+                }
+            }
+        }
+        if root.c.state == 1 && root.c.flags-note == "": HorizontalLayout {
+            spacing: 4px;
+            alignment: start;
+            for ch in root.c.chips: ChipView { c: ch; }
+        }
+        if root.c.state == 1 && root.c.flags-note != "": Text {
+            text: root.c.flags-note;
+            wrap: word-wrap;
+            min-height: self.preferred-height;
+            font-size: Type.small;
+            color: Theme.ink-3;
+            accessible-role: none;
+        }
+        if root.c.count != "": Text {
+            text: root.c.count;
+            font-size: Type.small;
+            color: Theme.ink-2;
+            accessible-role: none;
+        }
+        if root.c.note != "": Text {
+            text: root.c.note;
+            wrap: word-wrap;
+            min-height: self.preferred-height;
+            font-size: Type.small;
+            color: root.c.note-kind == 2 ? Theme.danger-text : root.c.note-kind == 1 ? Theme.warn-text : root.c.note-kind == 3 ? Theme.ink-3 : Theme.ink-2;
+            accessible-role: none;
+        }
+        if root.c.records.length > 0: Rectangle {
+            height: 7px;
+            Rectangle {
+                y: 3px;
+                height: 1px;
+                background: Theme.line;
+            }
+        }
+        for r in root.c.records: HorizontalLayout {
+            height: CardSize.record-h;
+            spacing: 6px;
+            Rectangle {
+                width: 2px;
+                background: r.differs ? Theme.warn : transparent;
+            }
+            Text {
+                text: r.type;
+                width: 50px;
+                overflow: elide;
+                font-family: Type.mono;
+                font-size: Type.small;
+                color: r.differs ? Theme.warn-text : Theme.ink-3;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            Text {
+                text: r.data;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                overflow: elide;
+                font-family: Type.mono;
+                font-size: Type.small;
+                color: r.differs ? Theme.warn-text : Theme.ink;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+            Text {
+                text: r.ttl;
+                font-family: Type.mono;
+                font-size: Type.small;
+                color: Theme.ink-3;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+        if root.c.more != "": Text {
+            text: root.c.more;
+            font-size: Type.small;
+            color: Theme.ink-3;
+            accessible-role: none;
+        }
+    }
+}
+
+export component CardsArea inherits Rectangle {
+    in property <[Card]> cards;
+    in property <bool> started;
+    in property <bool> inert;
+    callback card-clicked(int);
+    // The height a card has for its records, whenever it changes.
+    callback resized(length);
+
+    changed height => { root.resized(root.height); }
+    init => { root.resized(root.height); }
+
+    if !root.started: HorizontalLayout {
+        alignment: center;
+        spacing: 6px;
+        Text {
+            text: "Type a name or an address above and press";
+            font-size: Type.small;
+            color: Theme.ink-2;
+            vertical-alignment: center;
+        }
+        Kbd { text: "Enter"; }
+        Text {
+            text: "to ask every resolver at once, Windows first. Trace follows the delegation from the root.";
+            font-size: Type.small;
+            color: Theme.ink-2;
+            vertical-alignment: center;
+        }
+    }
+
+    if root.started: ScrollView {
+        accessible-role: AccessibleRole.list;
+        accessible-label: "Resolvers";
+        content-width: max(self.visible-width, root.cards.length * (CardSize.width + CardSize.gap) + 28px - CardSize.gap);
+        content-height: self.visible-height;
+        for c[i] in root.cards: CardView {
+            x: 14px + i * (CardSize.width + CardSize.gap);
+            y: 12px;
+            height: parent.content-height - 24px;
+            c: c;
+            clicked => { root.card-clicked(i); }
+        }
+    }
+}

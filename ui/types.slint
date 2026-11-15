@@ -1,0 +1,90 @@
+// What Rust hands the window. Every word, number and colour choice is made in Rust.
+
+// A small mark in a card: a flag (AA, TC, RD, RA, AD, CD), RRSIG, or a word with a tip.
+export struct Chip {
+    text: string,
+    // Set (a flag that is on); off ones are drawn faint.
+    on: bool,
+    // 0 plain, 1 accent (AD), 2 warn, 3 danger.
+    kind: int,
+    tip: string,
+}
+
+export struct RecordRow {
+    type: string,
+    data: string,
+    ttl: string,
+    // Not in the reference answer (a "differs" column's own records).
+    differs: bool,
+}
+
+export struct Card {
+    title: string,
+    sub: string,
+    // 0 asking, 1 an answer, 2 no answer.
+    state: int,
+    rcode: string,
+    // 0 ink, 1 warn (NXDOMAIN, NODATA), 2 danger (SERVFAIL, REFUSED, no answer).
+    rcode-kind: int,
+    time: string,
+    // "+31 ms connect": the connect (and TLS) time when a connection was opened for it.
+    setup: string,
+    time-tip: string,
+    chips: [Chip],
+    // Instead of the flags (Windows reports none).
+    flags-note: string,
+    count: string,
+    // "differs", "agrees" (or "reference"), or empty while waiting.
+    verdict: string,
+    // 0 none, 1 agrees, 2 differs.
+    verdict-kind: int,
+    verdict-tip: string,
+    // A wrapped line under the header: an error, NODATA, a hint.
+    note: string,
+    note-kind: int,
+    records: [RecordRow],
+    more: string,
+    selected: bool,
+    a11y: string,
+}
+
+export struct TraceRow {
+    index: int,
+    num: string,
+    // Indent for a glueless NS name's own walk.
+    depth: int,
+    zone: string,
+    server: string,
+    addr: string,
+    time: string,
+    result: string,
+    // 0 a referral, 1 the answer, 2 failed (next server), 3 the end (NXDOMAIN, NODATA, CNAME).
+    kind: int,
+    ds: string,
+    selected: bool,
+    a11y: string,
+}
+
+export struct HistoryRow {
+    name: string,
+    type: string,
+    summary: string,
+    when: string,
+}
+
+// A resolver in the Resolvers popup: a check with a label and its address.
+export struct Pick {
+    id: string,
+    label: string,
+    sub: string,
+    checked: bool,
+    enabled: bool,
+}
+
+// A public preset in the popup: one row per provider and address family, a toggle per transport.
+export struct PresetRow {
+    name: string,
+    sub: string,
+    ids: [string],
+    on: [bool],
+}

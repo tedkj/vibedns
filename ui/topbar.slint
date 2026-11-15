@@ -1,0 +1,629 @@
+// The top bar: the name (with its history), the type, Query and Trace, the resolvers, the
+// "Checking disabled" toggle, Flush and Copy all, theme and About. It draws; Rust decides.
+
+import { Theme, Type, Icons, Icon, Chamfer, Button, ButtonKind, IconButton, Checkbox, Select, TipArea, SectionLabel } from "@vibeware";
+import { Brand } from "brand.slint";
+import { AppIcons } from "app-icons.slint";
+import { HistoryRow, Pick, PresetRow } from "types.slint";
+
+// The name: VibeWare's field look in mono, with the history one click (or Alt+Down) away.
+// Escape first asks `escaped` (true: the field put the asked name back and used the key).
+export component NameField {
+    in-out property <string> text;
+    in property <bool> invalid;
+    in property <bool> inert;
+    in property <[HistoryRow]> history;
+    callback edited(string);
+    callback accepted();
+    callback history-picked(int);
+    callback escaped() -> bool;
+
+    height: Theme.control-h;
+    min-width: 160px;
+    horizontal-stretch: 1;
+    forward-focus: input;
+    accessible-role: text-input;
+    accessible-label: "Name";
+    accessible-value: root.text;
+    accessible-placeholder-text: "name or address";
+    accessible-action-set-value(v) => {
+        root.text = v;
+        root.edited(v);
+    }
+
+    public function focus-input() {
+        input.focus();
+    }
+
+    public function close() {
+        popup.close();
+    }
+
+    function open() {
+        if (root.history.length > 0) {
+            root.hot = -1;
+            popup.show();
+        }
+    }
+
+    property <int> hot: -1;
+
+    Chamfer {
+        width: 100%;
+        height: 100%;
+        fill: Theme.bg;
+        stroke: root.invalid ? Theme.danger : input.has-focus ? Theme.focus : Theme.line-strong;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 2px;
+        spacing: 2px;
+        Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+            input := TextInput {
+                // As VibeWare's Field: sized and moved inside the clip, keeping the cursor in
+                // view, so a long name stays inside the border.
+                property <length> computed-x;
+                x: min(0px, max(parent.width - self.width - self.text-cursor-width, self.computed-x));
+                width: max(parent.width - self.text-cursor-width, self.preferred-width);
+                cursor-position-changed(p) => {
+                    if p.x + self.computed-x < 0px {
+                        self.computed-x = -p.x;
+                    } else if p.x + self.computed-x > parent.width - self.text-cursor-width {
+                        self.computed-x = parent.width - p.x - self.text-cursor-width;
+                    }
+                }
+                height: 100%;
+                text <=> root.text;
+                enabled: !root.inert;
+                single-line: true;
+                font-family: Type.mono;
+                font-size: Type.small;
+                font-weight: Type.regular;
+                color: Theme.ink;
+                vertical-alignment: center;
+                selection-background-color: Theme.accent-soft;
+                selection-foreground-color: Theme.ink;
+                edited => { root.edited(self.text); }
+                accepted => { root.accepted(); }
+                key-pressed(e) => {
+                    if (e.modifiers.alt && e.text == Key.DownArrow) {
+                        root.open();
+                        return accept;
+                    }
+                    if (e.text == Key.Escape && root.escaped()) {
+                        return accept;
+                    }
+                    reject
+                }
+            }
+            if root.text == "": Text {
+                width: 100%;
+                height: 100%;
+                text: "name or address";
+                font-family: Type.mono;
+                font-size: Type.small;
+                color: Theme.ink-3;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                accessible-role: button;
+                accessible-label: "History";
+                accessible-enabled: root.history.length > 0;
+                accessible-action-default => { root.open(); }
+                background: cta.has-hover && root.history.length > 0 ? Theme.surface-3 : transparent;
+                Icon {
+                    x: 4px;
+                    y: 4px;
+                    path: Icons.chevron-down;
+                    tint: root.history.length > 0 ? Theme.ink-2 : Theme.line-strong;
+                }
+                cta := TipArea {
+                    tooltip: "History: the last 50 queries (Alt+Down)";
+                    enabled: root.history.length > 0;
+                    clicked => { root.open(); }
+                }
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 2px;
+        width: max(root.width, 600px);
+        Chamfer {
+            width: 100%;
+            height: pcol.preferred-height;
+            fill: Theme.surface;
+            stroke: Theme.line-strong;
+            accessible-role: list;
+            accessible-label: "History";
+            pcol := VerticalLayout {
+                padding: 4px;
+                for r[i] in root.history: Rectangle {
+                    height: Theme.row-h;
+                    background: i == root.hot ? Theme.surface-3 : transparent;
+                    accessible-role: list-item;
+                    accessible-label: r.name + " " + r.type;
+                    accessible-description: r.summary + ", " + r.when;
+                    // Pick first: closing the popup first would take this row (and the call) with it.
+                    accessible-action-default => {
+                        root.history-picked(i);
+                        popup.close();
+                    }
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: 10px;
+                        Text {
+                            text: r.name;
+                            width: 180px;
+                            overflow: elide;
+                            font-family: Type.mono;
+                            font-size: Type.small;
+                            color: Theme.ink;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                        Text {
+                            text: r.type;
+                            width: 90px;
+                            font-family: Type.mono;
+                            font-size: Type.small;
+                            color: Theme.ink-2;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                        Text {
+                            text: r.summary;
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            overflow: elide;
+                            font-size: Type.small;
+                            color: Theme.ink-3;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                        Text {
+                            text: r.when;
+                            font-family: Type.mono;
+                            font-size: Type.small;
+                            color: Theme.ink-3;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                    }
+                    TouchArea {
+                        clicked => {
+                            root.history-picked(i);
+                            popup.close();
+                        }
+                        changed has-hover => {
+                            if (self.has-hover) {
+                                root.hot = i;
+                            } else if (root.hot == i) {
+                                root.hot = -1;
+                            }
+                        }
+                    }
+                }
+            }
+            FocusScope {
+                init => { self.focus(); }
+                key-pressed(e) => {
+                    if (e.text == Key.DownArrow) {
+                        root.hot = Math.mod(root.hot + 1, root.history.length);
+                        return accept;
+                    }
+                    if (e.text == Key.UpArrow) {
+                        root.hot = root.hot <= 0 ? root.history.length - 1 : root.hot - 1;
+                        return accept;
+                    }
+                    if (e.text == Key.Return && root.hot >= 0) {
+                        root.history-picked(root.hot);
+                        popup.close();
+                        return accept;
+                    }
+                    if (e.text == Key.Escape) {
+                        popup.close();
+                        input.focus();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+        }
+    }
+}
+
+// A transport toggle in the Resolvers popup ("UDP" for Cloudflare): one checkbox node.
+component ToggleChip {
+    in property <string> text;
+    in property <string> label;
+    in property <bool> on;
+    in property <bool> enabled: true;
+    callback toggled();
+    width: 44px;
+    height: 22px;
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.on;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.toggled();
+        }
+    }
+    Chamfer {
+        width: 100%;
+        height: 100%;
+        cut: 4px;
+        fill: root.on ? Theme.accent : ta.has-hover && root.enabled ? Theme.surface-3 : Theme.surface-2;
+        stroke: root.on ? transparent : Theme.line-strong;
+    }
+    Text {
+        text: root.text;
+        font-family: Type.mono;
+        font-size: Type.small;
+        color: root.on ? Theme.accent-ink : root.enabled ? Theme.ink-2 : Theme.ink-3;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.toggled(); }
+    }
+}
+
+// A labelled check in the popup: the name, its address in mono.
+component PickLine inherits HorizontalLayout {
+    in property <Pick> p;
+    callback toggled();
+    spacing: 8px;
+    height: 24px;
+    Checkbox {
+        text: root.p.label;
+        checked: root.p.checked;
+        enabled: root.p.enabled;
+        controlled: true;
+        toggled => { root.toggled(); }
+    }
+    Text {
+        text: root.p.sub;
+        horizontal-stretch: 1;
+        min-width: 0px;
+        overflow: elide;
+        font-family: Type.mono;
+        font-size: Type.small;
+        color: Theme.ink-3;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+}
+
+export component TopBar inherits Rectangle {
+    in-out property <string> name;
+    in property <bool> name-invalid;
+    in property <[HistoryRow]> history;
+    in property <[string]> types;
+    in property <int> type-index;
+    in property <bool> cd;
+    in property <bool> busy;
+    in property <bool> has-answer;
+    in property <string> columns-text;
+    in property <[Pick]> adapter-picks;
+    in property <string> adapters-note;
+    in property <[PresetRow]> presets;
+    in property <[Pick]> custom-picks;
+    in property <bool> inert;
+
+    callback name-edited(string);
+    callback query();
+    callback trace();
+    callback name-escaped() -> bool;
+    callback history-picked(int);
+    callback type-picked(int);
+    callback cd-toggled(bool);
+    callback flush();
+    callback copy-all() -> bool;
+    callback pick-toggled(string);
+    callback custom-removed(string);
+    callback add-custom();
+    callback resolvers-opened();
+    callback toggle-theme();
+    callback about();
+
+    height: 48px;
+    background: Theme.bg;
+
+    public function focus-name() {
+        field.focus-input();
+    }
+
+    public function close-popups() {
+        field.close();
+        resolvers.close();
+        type-select.close();
+    }
+
+    // Copy all's moment of "copied" (the check), as VibeWare's CopyButton shows it.
+    property <bool> copied;
+    settle := Timer {
+        interval: 1500ms;
+        running: false;
+        triggered => {
+            root.copied = false;
+            self.running = false;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 10px;
+        spacing: 8px;
+        Brand {}
+        Rectangle { width: 6px; }
+        VerticalLayout {
+            alignment: center;
+            field := NameField {
+                min-width: 200px;
+                preferred-width: 300px;
+                max-width: 360px;
+                text <=> root.name;
+                invalid: root.name-invalid;
+                inert: root.inert;
+                history: root.history;
+                edited(t) => { root.name-edited(t); }
+                accepted => { root.query(); }
+                history-picked(i) => { root.history-picked(i); }
+                escaped => { root.name-escaped() }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            type-select := Select {
+                width: 92px;
+                label: "Type";
+                mono: true;
+                options: root.types;
+                selected: root.type-index;
+                controlled: true;
+                inert: root.inert;
+                changed(i) => { root.type-picked(i); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: "Query";
+                icon: AppIcons.play;
+                kind: ButtonKind.primary;
+                tooltip: "Ask every resolver (Enter)";
+                inert: root.inert;
+                clicked => { root.query(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: "Trace";
+                icon: AppIcons.trace;
+                tooltip: "Follow the delegation from the root, as dig +trace does";
+                inert: root.inert;
+                clicked => { root.trace(); }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; min-width: 4px; }
+        VerticalLayout {
+            alignment: center;
+            res-button := Button {
+                text: "Resolvers";
+                icon: Icons.server;
+                label: "Resolvers";
+                tooltip: "Which resolvers are asked (" + root.columns-text + ")";
+                inert: root.inert;
+                clicked => {
+                    root.resolvers-opened();
+                    resolvers.show();
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: cdbox.preferred-width;
+                height: Theme.control-h;
+                cdbox := Checkbox {
+                    y: (parent.height - self.height) / 2;
+                    text: "Checking disabled";
+                    checked: root.cd;
+                    controlled: true;
+                    inert: root.inert;
+                    toggled(v) => { root.cd-toggled(v); }
+                }
+                TipArea {
+                    tooltip: "CD=1: ask resolvers not to validate DNSSEC (to see whether a SERVFAIL is a validation failure)";
+                    clicked => { root.cd-toggled(!root.cd); }
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: AppIcons.flush;
+                label: "Flush Windows cache";
+                tooltip: "Flush Windows' DNS cache, then ask Windows again";
+                inert: root.inert;
+                clicked => { root.flush(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: root.copied ? Icons.check : Icons.copy;
+                label: root.copied ? "Copied" : "Copy all";
+                tooltip: "Copy every column as dig-style text";
+                enabled: root.has-answer;
+                inert: root.inert;
+                enter-presses: false;
+                clicked => {
+                    if (root.copy-all()) {
+                        root.copied = true;
+                        settle.running = true;
+                        settle.restart();
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 1px;
+            background: Theme.line;
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.theme;
+                label: "Theme";
+                tooltip: Theme.dark ? "Light theme" : "Dark theme";
+                inert: root.inert;
+                clicked => { root.toggle-theme(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.info;
+                label: "About";
+                tooltip: "About VibeDNS";
+                inert: root.inert;
+                clicked => { root.about(); }
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.line;
+    }
+
+    resolvers := PopupWindow {
+        close-policy: close-on-click-outside;
+        x: res-button.absolute-position.x - root.absolute-position.x + res-button.width - self.width;
+        y: root.height - 4px;
+        width: 480px;
+        Chamfer {
+            width: 100%;
+            height: rcol.preferred-height;
+            cut: Theme.cut;
+            fill: Theme.surface;
+            stroke: Theme.line-strong;
+            accessible-role: groupbox;
+            accessible-label: "Resolvers";
+            rcol := VerticalLayout {
+                padding: 16px;
+                spacing: 6px;
+                HorizontalLayout {
+                    Text {
+                        text: "Resolvers";
+                        horizontal-stretch: 1;
+                        font-size: Type.small;
+                        font-weight: Type.strong;
+                        color: Theme.ink;
+                    }
+                    Text {
+                        text: root.columns-text;
+                        font-family: Type.mono;
+                        font-size: Type.small;
+                        color: Theme.ink-3;
+                    }
+                }
+                PickLine {
+                    p: { id: "windows", label: "Windows", sub: "always: what apps get", checked: true, enabled: false };
+                }
+                SectionLabel { text: "adapters"; }
+                for p in root.adapter-picks: PickLine {
+                    p: p;
+                    toggled => { root.pick-toggled(p.id); }
+                }
+                if root.adapters-note != "": Text {
+                    text: root.adapters-note;
+                    wrap: word-wrap;
+                    min-height: self.preferred-height;
+                    font-size: Type.small;
+                    color: Theme.ink-3;
+                }
+                SectionLabel { text: "public"; }
+                for r in root.presets: HorizontalLayout {
+                    spacing: 6px;
+                    height: 26px;
+                    // The toggles carry "Cloudflare 1.1.1.1 UDP" for screen readers: these are not nodes.
+                    Text {
+                        text: r.name;
+                        width: 86px;
+                        font-size: Type.small;
+                        color: Theme.ink;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                    Text {
+                        text: r.sub;
+                        horizontal-stretch: 1;
+                        min-width: 0px;
+                        overflow: elide;
+                        font-family: Type.mono;
+                        font-size: Type.small;
+                        color: Theme.ink-3;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                    for t[k] in ["UDP", "TCP", "DoT", "DoH"]: VerticalLayout {
+                        alignment: center;
+                        ToggleChip {
+                            text: t;
+                            label: r.name + " " + r.sub + " " + t;
+                            on: r.on[k];
+                            toggled => { root.pick-toggled(r.ids[k]); }
+                        }
+                    }
+                }
+                SectionLabel { text: "your own"; }
+                for p in root.custom-picks: HorizontalLayout {
+                    spacing: 4px;
+                    PickLine {
+                        p: p;
+                        toggled => { root.pick-toggled(p.id); }
+                    }
+                    IconButton {
+                        icon: Icons.x;
+                        label: "Remove " + p.label;
+                        tooltip: "Remove this resolver";
+                        clicked => { root.custom-removed(p.id); }
+                    }
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: "Add custom…";
+                        icon: Icons.plus;
+                        kind: ButtonKind.ghost;
+                        clicked => {
+                            resolvers.close();
+                            root.add-custom();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

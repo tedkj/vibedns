@@ -1,0 +1,66 @@
+// The detail panel: the selected column's full response (or the selected trace step) in dig's
+// text format, with Copy. Text that cannot be selected gets a Copy button (VibeWare rule).
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Type, CopyButton } from "@vibeware";
+
+export component DetailPanel inherits Rectangle {
+    in property <string> title;
+    in property <string> body;
+    in property <bool> inert;
+    callback copy() -> bool;
+
+    height: 204px;
+    background: Theme.bg;
+    Rectangle {
+        y: 0;
+        height: 1px;
+        background: Theme.line;
+    }
+    VerticalLayout {
+        padding-top: 1px;
+        Rectangle {
+            height: 34px;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 10px;
+                spacing: 10px;
+                Text {
+                    text: root.title;
+                    horizontal-stretch: 1;
+                    min-width: 0px;
+                    overflow: elide;
+                    font-size: Type.small;
+                    font-weight: Type.strong;
+                    color: Theme.ink;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    CopyButton {
+                        caption: "Copy response";
+                        tooltip: "Copy this response as dig-style text";
+                        enabled: root.body != "";
+                        inert: root.inert;
+                        copy => { root.copy() }
+                    }
+                }
+            }
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            content-width: max(self.visible-width, body.preferred-width + 28px);
+            content-height: max(self.visible-height, body.preferred-height + 8px);
+            body := Text {
+                x: 14px;
+                y: 0px;
+                text: root.body;
+                font-family: Type.mono;
+                font-size: Type.small;
+                color: Theme.ink-2;
+                accessible-role: text;
+                accessible-label: "Response";
+            }
+        }
+    }
+}

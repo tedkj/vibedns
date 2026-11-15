@@ -1,0 +1,135 @@
+// Add a resolver of your own: address (or host name), port, transport, and for DoT the TLS name,
+// for DoH the URL template and GET or POST. Rust checks it on Add and says what is wrong.
+
+import { Theme, Type, Button, ButtonKind, Dialog, Field, Segmented } from "@vibeware";
+
+component Row inherits HorizontalLayout {
+    in property <string> label;
+    spacing: 12px;
+    Text {
+        text: root.label;
+        width: 78px;
+        font-size: Type.small;
+        color: Theme.ink-2;
+        vertical-alignment: center;
+    }
+    @children
+}
+
+export component CustomDialog {
+    in-out property <string> address;
+    in-out property <string> port;
+    in-out property <int> proto;
+    in-out property <string> tls-name;
+    in-out property <string> url;
+    in-out property <int> method;
+    in property <string> error;
+    callback add();
+    callback cancelled();
+
+    Dialog {
+        width: root.width;
+        height: root.height;
+        title: "Add a resolver";
+        dialog-width: 460px;
+        cancelled => { root.cancelled(); }
+        accepted => { root.add(); }
+        Row {
+            label: "Transport";
+            Segmented {
+                label: "Transport";
+                options: ["UDP", "TCP", "DoT", "DoH"];
+                selected <=> root.proto;
+            }
+        }
+        if root.proto != 3: Row {
+            label: "Address";
+            Field {
+                a11y-name: "Address";
+                placeholder: "192.0.2.53, 2001:db8::53 or dns.example";
+                mono: true;
+                text <=> root.address;
+                accepted => { root.add(); }
+            }
+        }
+        if root.proto == 3: Row {
+            label: "URL";
+            Field {
+                a11y-name: "URL";
+                placeholder: "https://dns.example/dns-query{?dns}";
+                mono: true;
+                text <=> root.url;
+                accepted => { root.add(); }
+            }
+        }
+        if root.proto == 3: Row {
+            label: "Address";
+            Field {
+                a11y-name: "Address";
+                placeholder: "optional: the URL's host when empty";
+                mono: true;
+                text <=> root.address;
+                accepted => { root.add(); }
+            }
+        }
+        if root.proto == 2: Row {
+            label: "TLS name";
+            Field {
+                a11y-name: "TLS name";
+                placeholder: "the name its certificate carries";
+                mono: true;
+                text <=> root.tls-name;
+                accepted => { root.add(); }
+            }
+        }
+        if root.proto != 3: Row {
+            label: "Port";
+            Field {
+                a11y-name: "Port";
+                placeholder: root.proto == 2 ? "853" : "53";
+                mono: true;
+                horizontal-stretch: 0;
+                width: 96px;
+                text <=> root.port;
+                accepted => { root.add(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        if root.proto == 3: Row {
+            label: "Method";
+            Segmented {
+                label: "Method";
+                options: ["GET", "POST"];
+                selected <=> root.method;
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        if root.error != "": Text {
+            text: root.error;
+            wrap: word-wrap;
+            min-height: self.preferred-height;
+            font-size: Type.small;
+            color: Theme.danger-text;
+        }
+        Text {
+            text: "A host name is resolved once by Windows, and the address shown on its column.";
+            wrap: word-wrap;
+            min-height: self.preferred-height;
+            font-size: Type.small;
+            color: Theme.ink-3;
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            Button {
+                text: "Cancel";
+                clicked => { root.cancelled(); }
+            }
+            Button {
+                text: "Add";
+                kind: ButtonKind.primary;
+                clicked => { root.add(); }
+            }
+        }
+    }
+}

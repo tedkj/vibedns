@@ -1,0 +1,173 @@
+// The trace from the root: one row per step (zone, server, its address, time, what it said),
+// in place of the columns. One accessibility node per row.
+
+import { ListView } from "std-widgets.slint";
+import { Theme, Type, Button, ButtonKind } from "@vibeware";
+import { TraceRow } from "types.slint";
+
+export global TraceCols {
+    out property <length> num: 24px;
+    out property <length> zone: 150px;
+    out property <length> server: 210px;
+    out property <length> addr: 150px;
+    out property <length> time: 56px;
+    out property <length> spacing: 10px;
+}
+
+component Cell inherits Text {
+    font-family: Type.mono;
+    font-size: Type.small;
+    color: Theme.ink-2;
+    vertical-alignment: center;
+    overflow: elide;
+    accessible-role: none;
+}
+
+component Line inherits Rectangle {
+    in property <TraceRow> r;
+    callback clicked();
+    height: Theme.row-h;
+    accessible-role: list-item;
+    accessible-label: "Step " + root.r.num;
+    accessible-description: root.r.a11y;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.r.selected;
+    accessible-action-default => { root.clicked(); }
+    background: root.r.selected ? Theme.accent-soft : ta.has-hover ? Theme.surface-2 : transparent;
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    if root.r.selected: Rectangle {
+        x: 0;
+        width: 2px;
+        background: Theme.accent;
+    }
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: TraceCols.spacing;
+        Cell {
+            width: TraceCols.num;
+            text: root.r.num;
+            color: root.r.kind == 1 ? Theme.accent : Theme.ink-3;
+            horizontal-alignment: right;
+        }
+        Cell {
+            width: TraceCols.zone;
+            text: root.r.zone;
+            color: root.r.depth > 0 ? Theme.ink-2 : Theme.ink;
+        }
+        Cell {
+            width: TraceCols.server;
+            text: root.r.server;
+        }
+        Cell {
+            width: TraceCols.addr;
+            text: root.r.addr;
+            color: Theme.ink-3;
+        }
+        Cell {
+            width: TraceCols.time;
+            text: root.r.time;
+            horizontal-alignment: right;
+        }
+        Cell {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            text: root.r.result;
+            font-family: Type.ui;
+            color: root.r.kind == 2 ? Theme.danger-text : root.r.kind == 1 ? Theme.ok-text : root.r.kind == 3 ? Theme.warn-text : Theme.ink;
+        }
+        if root.r.ds != "": Cell {
+            text: root.r.ds;
+            color: Theme.ink-3;
+        }
+    }
+}
+
+component Head inherits Text {
+    font-family: Type.mono;
+    font-size: Type.small;
+    color: Theme.ink-3;
+    vertical-alignment: center;
+    accessible-role: none;
+}
+
+export component TraceView inherits Rectangle {
+    in property <[TraceRow]> rows;
+    in property <string> title;
+    in property <string> end;
+    in property <int> end-kind;
+    // "Trace web.example.net." when the walk ended at a CNAME.
+    in property <string> follow;
+    in property <bool> inert;
+    callback row-clicked(int);
+    callback follow-clicked();
+
+    VerticalLayout {
+        Rectangle {
+            height: 34px;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 12px;
+                Text {
+                    text: root.title;
+                    min-width: 0px;
+                    overflow: elide;
+                    font-size: Type.small;
+                    color: Theme.ink-2;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.end;
+                    horizontal-stretch: 1;
+                    min-width: 0px;
+                    overflow: elide;
+                    font-size: Type.small;
+                    font-weight: Type.strong;
+                    color: root.end-kind == 2 ? Theme.danger-text : root.end-kind == 1 ? Theme.ok-text : root.end-kind == 3 ? Theme.warn-text : Theme.ink-3;
+                    vertical-alignment: center;
+                }
+                if root.follow != "": VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: root.follow;
+                        kind: ButtonKind.ghost;
+                        tooltip: "Trace the alias's target from the root";
+                        inert: root.inert;
+                        clicked => { root.follow-clicked(); }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: 24px;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: TraceCols.spacing;
+                Head { width: TraceCols.num; text: "#"; horizontal-alignment: right; }
+                Head { width: TraceCols.zone; text: "ZONE"; }
+                Head { width: TraceCols.server; text: "SERVER"; }
+                Head { width: TraceCols.addr; text: "ADDRESS"; }
+                Head { width: TraceCols.time; text: "TIME"; horizontal-alignment: right; }
+                Head { horizontal-stretch: 1; text: "WHAT IT SAID"; }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.line;
+            }
+        }
+        steps := ListView {
+            vertical-stretch: 1;
+            accessible-role: AccessibleRole.list;
+            accessible-label: "Trace";
+            for r in root.rows: Line {
+                r: r;
+                clicked => { root.row-clicked(r.index); }
+            }
+        }
+    }
+}

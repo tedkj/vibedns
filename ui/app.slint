@@ -1,0 +1,315 @@
+// VibeDNS's main window. Layout and drawing only; every decision is made in Rust.
+
+import { Theme, Type, Icons, IconButton, TipLayer, Toast, ToastKind } from "@vibeware";
+import { AboutDialog, CheckRow } from "brand.slint";
+import { TopBar } from "topbar.slint";
+import { CardsArea } from "cards.slint";
+import { TraceView } from "trace.slint";
+import { DetailPanel } from "detail.slint";
+import { CustomDialog } from "custom.slint";
+import { Card, Chip, RecordRow, TraceRow, HistoryRow, Pick, PresetRow } from "types.slint";
+
+export { Card, Chip, RecordRow, TraceRow, HistoryRow, Pick, PresetRow }
+
+export struct ToastItem {
+    id: int,
+    text: string,
+    kind: ToastKind,
+    action: string,
+}
+
+export component AppWindow inherits Window {
+    title: "VibeDNS";
+    icon: @image-url("../assets/app-128.png");
+    preferred-width: 1240px;
+    preferred-height: 760px;
+    min-width: 1080px;
+    min-height: 600px;
+    // The work area's colour: it covers most of the window (one fill per region, VIBEWARE.md).
+    // The bars and panels draw their own.
+    background: Theme.surface;
+    default-font-family: Type.ui;
+    default-font-size: Type.small;
+    default-font-weight: Type.regular;
+
+    in property <string> version;
+    in property <string> status-left;
+    in property <bool> status-warn;
+    in property <string> status-right;
+    in property <[ToastItem]> toasts;
+    in-out property <bool> about-open;
+    // About's version line and its install check (the controller's words and states).
+    in property <string> about-line;
+    in property <[CheckRow]> check-rows;
+    in property <bool> checking;
+    in property <bool> checked;
+    in-out property <bool> custom-open;
+
+    // ---- the bar ----
+    in-out property <string> name;
+    in property <bool> name-invalid;
+    in property <[HistoryRow]> history;
+    in property <[string]> types;
+    in property <int> type-index;
+    in property <bool> cd;
+    in property <bool> has-answer;
+    in property <string> columns-text;
+    in property <[Pick]> adapter-picks;
+    in property <string> adapters-note;
+    in property <[PresetRow]> presets;
+    in property <[Pick]> custom-picks;
+
+    // ---- the question, the columns, the trace, the detail ----
+    in property <string> asked;
+    in property <string> asked-note;
+    in property <string> asked-right;
+    in property <bool> started;
+    in property <bool> tracing;
+    in property <[Card]> cards;
+    in property <[TraceRow]> trace-rows;
+    in property <string> trace-title;
+    in property <string> trace-end;
+    in property <int> trace-end-kind;
+    in property <string> trace-follow;
+    in property <string> detail-title;
+    in property <string> detail-body;
+
+    // ---- the custom resolver dialog ----
+    in-out property <string> custom-address;
+    in-out property <string> custom-port;
+    in-out property <int> custom-proto;
+    in-out property <string> custom-tls;
+    in-out property <string> custom-url;
+    in-out property <int> custom-method;
+    in property <string> custom-error;
+
+    callback toggle-theme();
+    // About: "Check this install" pressed (the controller runs it on a worker, once at a time),
+    // and the website link.
+    callback check-install();
+    callback open-site();
+    callback toast-action(int);
+    callback toast-dismissed(int);
+    // A dialog closed: toasts behind it get their full time again (a toast in sight but out of
+    // reach must not expire).
+    callback dialogs-closed();
+    callback copy-text(string) -> bool;
+    callback name-edited(string);
+    callback query();
+    callback trace();
+    callback name-escaped() -> bool;
+    callback history-picked(int);
+    callback type-picked(int);
+    callback cd-toggled(bool);
+    callback flush();
+    callback copy-all() -> bool;
+    callback pick-toggled(string);
+    callback custom-removed(string);
+    callback add-custom();
+    callback resolvers-opened();
+    callback card-clicked(int);
+    callback cards-resized(length);
+    callback trace-row-clicked(int);
+    callback follow-clicked();
+    callback copy-detail() -> bool;
+    callback custom-add();
+    callback custom-cancelled();
+
+    property <bool> dialog-open: root.about-open || root.custom-open;
+
+    public function focus-name() {
+        bar.focus-name();
+    }
+
+    changed dialog-open => {
+        if (!self.dialog-open) {
+            root.dialogs-closed();
+        }
+    }
+
+    VerticalLayout {
+        bar := TopBar {
+            name <=> root.name;
+            name-invalid: root.name-invalid;
+            history: root.history;
+            types: root.types;
+            type-index: root.type-index;
+            cd: root.cd;
+            has-answer: root.has-answer;
+            columns-text: root.columns-text;
+            adapter-picks: root.adapter-picks;
+            adapters-note: root.adapters-note;
+            presets: root.presets;
+            custom-picks: root.custom-picks;
+            inert: root.dialog-open;
+            name-edited(t) => { root.name-edited(t); }
+            query => { root.query(); }
+            trace => { root.trace(); }
+            name-escaped => { root.name-escaped() }
+            history-picked(i) => { root.history-picked(i); }
+            type-picked(i) => { root.type-picked(i); }
+            cd-toggled(v) => { root.cd-toggled(v); }
+            flush => { root.flush(); }
+            copy-all => { root.copy-all() }
+            pick-toggled(id) => { root.pick-toggled(id); }
+            custom-removed(id) => { root.custom-removed(id); }
+            add-custom => { root.add-custom(); }
+            resolvers-opened => { root.resolvers-opened(); }
+            toggle-theme => { root.toggle-theme(); }
+            about => {
+                bar.close-popups();
+                root.about-open = true;
+            }
+        }
+
+        // ---- what was asked ----
+        Rectangle {
+            height: 30px;
+            background: Theme.bg;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 12px;
+                Text {
+                    text: root.asked;
+                    min-width: 0px;
+                    overflow: elide;
+                    font-family: Type.mono;
+                    font-size: Type.small;
+                    color: Theme.ink;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.asked-note;
+                    horizontal-stretch: 1;
+                    min-width: 0px;
+                    overflow: elide;
+                    font-size: Type.small;
+                    color: Theme.ink-3;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.asked-right;
+                    font-family: Type.mono;
+                    font-size: Type.small;
+                    color: Theme.ink-3;
+                    vertical-alignment: center;
+                }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.line;
+            }
+        }
+
+        if !root.tracing: CardsArea {
+            vertical-stretch: 1;
+            cards: root.cards;
+            started: root.started;
+            inert: root.dialog-open;
+            card-clicked(i) => { root.card-clicked(i); }
+            resized(h) => { root.cards-resized(h); }
+        }
+        if root.tracing: TraceView {
+            vertical-stretch: 1;
+            rows: root.trace-rows;
+            title: root.trace-title;
+            end: root.trace-end;
+            end-kind: root.trace-end-kind;
+            follow: root.trace-follow;
+            inert: root.dialog-open;
+            row-clicked(i) => { root.trace-row-clicked(i); }
+            follow-clicked => { root.follow-clicked(); }
+        }
+
+        if root.started: DetailPanel {
+            title: root.detail-title;
+            body: root.detail-body;
+            inert: root.dialog-open;
+            copy => { root.copy-detail() }
+        }
+
+        // ---- the status line ----
+        Rectangle {
+            height: 26px;
+            background: Theme.bg;
+            Rectangle { y: 0; height: 1px; background: Theme.line; }
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 12px;
+                Text {
+                    text: root.status-left;
+                    font-family: Type.mono;
+                    color: root.status-warn ? Theme.warn-text : Theme.ink-2;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                    min-width: 0px;
+                }
+                Text {
+                    text: root.status-right;
+                    font-family: Type.mono;
+                    color: Theme.ink-3;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // Toasts, bottom right, newest at the bottom: above the detail panel.
+    VerticalLayout {
+        x: root.width - self.width - 14px;
+        y: root.height - self.height - (root.started ? 204px : 0px) - 38px;
+        width: 380px;
+        height: self.preferred-height;
+        spacing: 8px;
+        for t in root.toasts: Toast {
+            text: t.text;
+            kind: t.kind;
+            action: t.action;
+            inert: root.dialog-open;
+            action-clicked => { root.toast-action(t.id); }
+            dismissed => { root.toast-dismissed(t.id); }
+            copy => { root.copy-text(t.text) }
+        }
+    }
+
+    if root.custom-open: CustomDialog {
+        width: root.width;
+        height: root.height;
+        address <=> root.custom-address;
+        port <=> root.custom-port;
+        proto <=> root.custom-proto;
+        tls-name <=> root.custom-tls;
+        url <=> root.custom-url;
+        method <=> root.custom-method;
+        error: root.custom-error;
+        add => { root.custom-add(); }
+        cancelled => {
+            root.custom-cancelled();
+            root.focus-name();
+        }
+    }
+
+    if root.about-open: AboutDialog {
+        width: root.width;
+        height: root.height;
+        line: root.about-line;
+        rows: root.check-rows;
+        checking: root.checking;
+        checked: root.checked;
+        check => { root.check-install(); }
+        open-site => { root.open-site(); }
+        closed => {
+            root.about-open = false;
+            root.focus-name();
+        }
+    }
+
+    TipLayer {
+        width: root.width;
+        height: root.height;
+    }
+}
